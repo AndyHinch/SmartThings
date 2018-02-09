@@ -33,6 +33,11 @@
  *	CHANGELOG:
  *	0.99: Final release code cleanup and commenting
  *	1.00: Added comments to code for readability
+ *      1.01  Andrew Hinchcliffe
+ *		  Added new soft on/off seconds setting in config called softdelay.
+ *		  Changed how on and off work. It will not do soft on/off if softdelay > 0.
+ *		  Number of second from going from on to off or off or on is now dependant on
+ *		  softdelay setting by using dimingDuration. Default is 5 seconds.
  */
 metadata {
 	definition (name: "Qubino DIN Dimmer", namespace: "Goap", author: "Kristjan Jam&scaron;ek") {
@@ -279,7 +284,14 @@ metadata {
 							"0 - Reporting disabled.\n" +
 							"1 - 127 = 0,1°C - 12,7°C, step is 0,1°C.\n" +
 							"Default value: 5 = 0,5°C change."
-			
+
+				input name: "softdelay", type: "number", range: "0..100", required: false,
+					title: "Soft On/Off Delay. Time taken to go from off to on, or on to off when using ST UI.\n" +
+						   "Available settings:\n" +
+							"0 - No Delay.\n" +
+							"0 – 100 (from 1 to 100 seconds).\n" +
+							"Default value: 5 = 5 secs."
+		
 /**
 *			--------	ASSOCIATION GROUP SECTION	--------
 */
@@ -379,27 +391,45 @@ def configure() {
  * Switch capability command handler for ON state. It issues a Switch Multilevel Set command with value 0xFF and instantaneous dimming duration.
  * This command is followed by a Switch Multilevel Get command, that updates the actual state of the dimmer.
  *		
+ *	AH - I have changed this to have softdelay setting with default of 5 seconds. I didn't like the instant off. Now configurable.
+ *
  * @param void
  * @return void.
 */
 def on() {
-        delayBetween([
-				zwave.switchMultilevelV3.switchMultilevelSet(value: 0xFF, dimmingDuration: 0x00).format(),
-				zwave.switchMultilevelV1.switchMultilevelGet().format()
-        ], 1000)  
+	if (settings.softdelay != null) {
+            delayBetween([
+                    zwave.switchMultilevelV3.switchMultilevelSet(value: 0xFF, dimmingDuration: settings.softdelay).format(),
+                    zwave.switchMultilevelV1.switchMultilevelGet().format()
+            ], (settings.softdelay * 1000) + 1000) // n+1 second delay for dimmers that change gradually, can be left out for immediate switches  
+		}else{
+            delayBetween([
+                    zwave.switchMultilevelV3.switchMultilevelSet(value: 0xFF, dimmingDuration: 5).format(),
+                    zwave.switchMultilevelV1.switchMultilevelGet().format()
+            ], 5000)  // 5 second delay for dimmers that change gradually, can be left out for immediate switches
+        }
 }
 /**
  * Switch capability command handler for OFF state. It issues a Switch Multilevel Set command with value 0x00 and instantaneous dimming duration.
  * This command is followed by a Switch Multilevel Get command, that updates the actual state of the dimmer.
  *		
+ *	AH - I have changed this to have softdelay setting with default of 5 seconds. I didn't like the instant off. Now configurable.
+ *
  * @param void
  * @return void.
 */
 def off() {
-        delayBetween([
-				zwave.switchMultilevelV3.switchMultilevelSet(value: 0x00, dimmingDuration: 0x00).format(),
+	if (settings.softdelay != null) {
+            delayBetween([
+				zwave.switchMultilevelV3.switchMultilevelSet(value: 0x00, dimmingDuration: settings.softdelay).format(),
 				zwave.switchMultilevelV1.switchMultilevelGet().format()
-        ], 1000)
+            ], (settings.softdelay * 1000) + 1000)  // n+1 second delay for dimmers that change gradually, can be left out for immediate switches
+		}else{
+            delayBetween([
+				zwave.switchMultilevelV3.switchMultilevelSet(value: 0x00, dimmingDuration: 5).format(),
+				zwave.switchMultilevelV1.switchMultilevelGet().format()
+            ], 5000)  // 5 second delay for dimmers that change gradually, can be left out for immediate switches
+        }
 }
 /**
  * Switch Level capability command handler for a positive dimming state. It issues a Switch Multilevel Set command with value contained in the parameter value and instantaneous dimming duration.
